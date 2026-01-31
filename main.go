@@ -3,17 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
-
-	"github.com/spf13/viper"
-
+	"github.com/joho/godotenv"
 	"go-cashier/database"
 	"go-cashier/handlers"
 	"go-cashier/models"
@@ -26,23 +22,38 @@ type Config struct {
 	DBConn string `mapstructure:"DB_CONN"`
 }
 
+
 func loadConfig() Config {
-	cfg := Config{
-		Port:   os.Getenv("PORT"),
-		DBConn: os.Getenv("DB_CONN"),
+	// =====================
+	// Load .env ONLY if exists (LOCAL)
+	// =====================
+	if _, err := os.Stat(".env"); err == nil {
+		log.Println("📦 Loading .env (local mode)")
+		_ = godotenv.Load()
+	} else {
+		log.Println("🚄 No .env found (Railway / production mode)")
 	}
 
-	// Railway biasanya inject PORT
-	if cfg.Port == "" {
-		cfg.Port = "8080"
+	port := os.Getenv("PORT")
+	dbConn := os.Getenv("DB_CONN")
+
+	log.Println("ENV PORT   =", port)
+	log.Println("ENV DB_CONN=", dbConn)
+
+	if port == "" {
+		port = "8080"
 	}
 
-	if cfg.DBConn == "" {
+	if dbConn == "" {
 		log.Fatal("❌ DB_CONN is required (Railway ENV not injected)")
 	}
 
-	return cfg
+	return Config{
+		Port:   port,
+		DBConn: dbConn,
+	}
 }
+
 
 func main() {
 	// =====================
@@ -67,27 +78,21 @@ func main() {
 	productHandler := handlers.NewProductHandler(productService)
 
 	// =====================
-	// Router (ServeMux)
+	// Router
 	// =====================
 	mux := http.NewServeMux()
 
-	// Product routes
 	mux.HandleFunc("/api/products", productHandler.HandleProducts)
 	mux.HandleFunc("/api/products/", productHandler.HandleProductByID)
 
-	// Default route
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":  http.StatusOK,
-			"message": "Welcome to Cashier API!",
-			"data": models.Response{
-				Status:  http.StatusOK,
-				Message: "Welcome to Cashier API!",
-				Data: map[string]interface{}{
-					"app":     "Cashier API",
-					"version": 1,
-				},
+		_ = json.NewEncoder(w).Encode(models.Response{
+			Status:  http.StatusOK,
+			Message: "Welcome to Cashier API!",
+			Data: map[string]interface{}{
+				"app":     "Cashier API",
+				"version": 1,
 			},
 		})
 	})
@@ -95,7 +100,7 @@ func main() {
 	// =====================
 	// HTTP Server
 	// =====================
-	addr := ":" + port
+	addr := ":" + config.Port
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -105,12 +110,12 @@ func main() {
 	}
 
 	// =====================
-	// Run server
+	// Run Server
 	// =====================
 	go func() {
-		fmt.Println("Server running on", addr)
+		log.Println("🚀 Server running on", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal("Server error:", err)
+			log.Fatal("❌ Server error:", err)
 		}
 	}()
 
@@ -121,14 +126,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	fmt.Println("Shutting down server...")
+	log.Println("🛑 Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+		log.Fatal("❌ Server forced to shutdown:", err)
 	}
 
-	fmt.Println("Server exited gracefully")
+	log.Println("✅ Server exited gracefully")
 }
