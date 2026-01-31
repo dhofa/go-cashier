@@ -26,44 +26,36 @@ type Config struct {
 	DBConn string `mapstructure:"DB_CONN"`
 }
 
+func loadConfig() Config {
+	cfg := Config{
+		Port:   os.Getenv("PORT"),
+		DBConn: os.Getenv("DB_CONN"),
+	}
+
+	// Railway biasanya inject PORT
+	if cfg.Port == "" {
+		cfg.Port = "8080"
+	}
+
+	if cfg.DBConn == "" {
+		log.Fatal("❌ DB_CONN is required (Railway ENV not injected)")
+	}
+
+	return cfg
+}
+
 func main() {
 	// =====================
-	// Load config (.env)
+	// Load Config
 	// =====================
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
-	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			log.Println("Error reading config file:", err)
-		}
-	}
-
-
-// =====================
-	// ENV (RAILWAY SAFE)
-	// =====================
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	dbConn := os.Getenv("DB_CONN")
-	if dbConn == "" {
-		log.Fatal("DB_CONN is required (Railway ENV not injected)")
-	}
-
-	log.Println("ENV OK | PORT:", port)
+	config := loadConfig()
 
 	// =====================
 	// Init Database
 	// =====================
-	db, err := database.InitDB(dbConn)
+	db, err := database.InitDB(config.DBConn)
 	if err != nil {
-		log.Fatal("Failed to initialize database:", err)
+		log.Fatal("❌ Failed to initialize database:", err)
 	}
 	defer db.Close()
 
