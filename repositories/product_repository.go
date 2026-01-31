@@ -24,9 +24,14 @@ func NewProductRepository(db *pgxpool.Pool) *ProductRepository {
 // =====================
 // GET ALL
 // =====================
+// =====================
+// GET ALL
+// =====================
 func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, error) {
 	query := `
-		SELECT p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0), COALESCE(c.name, '') as category_name
+		SELECT 
+			p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0),
+			c.id, c.name, c.description
 		FROM products p
 		LEFT JOIN categories c ON p.category_id = c.id
 	`
@@ -40,9 +45,24 @@ func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, er
 	products := make([]models.Product, 0)
 	for rows.Next() {
 		var p models.Product
-		if err := rows.Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &p.CategoryName); err != nil {
+		var catID *int
+		var catName, catDesc *string
+
+		if err := rows.Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &catID, &catName, &catDesc); err != nil {
 			return nil, err
 		}
+
+		if catID != nil {
+			p.Category = &models.Category{
+				ID:          *catID,
+				Name:        *catName,
+				Description: "",
+			}
+			if catDesc != nil {
+				p.Category.Description = *catDesc
+			}
+		}
+
 		products = append(products, p)
 	}
 
@@ -73,23 +93,42 @@ func (repo *ProductRepository) Create(ctx context.Context, product *models.Produ
 // =====================
 // GET BY ID
 // =====================
+// =====================
+// GET BY ID
+// =====================
 func (repo *ProductRepository) GetByID(ctx context.Context, id int) (*models.Product, error) {
 	query := `
-		SELECT p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0), COALESCE(c.name, '') as category_name
+		SELECT 
+			p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0),
+			c.id, c.name, c.description
 		FROM products p
 		LEFT JOIN categories c ON p.category_id = c.id
 		WHERE p.id = $1
 	`
 
 	var p models.Product
+	var catID *int
+	var catName, catDesc *string
+
 	err := repo.db.QueryRow(ctx, query, id).
-		Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &p.CategoryName)
+		Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &catID, &catName, &catDesc)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("produk tidak ditemukan")
 		}
 		return nil, err
+	}
+
+	if catID != nil {
+		p.Category = &models.Category{
+			ID:          *catID,
+			Name:        *catName,
+			Description: "",
+		}
+		if catDesc != nil {
+			p.Category.Description = *catDesc
+		}
 	}
 
 	return &p, nil
