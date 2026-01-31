@@ -100,7 +100,12 @@ func main() {
 	// =====================
 	// HTTP Server
 	// =====================
-	addr := "0.0.0.0:" + config.Port
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
+
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
