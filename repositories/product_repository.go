@@ -21,8 +21,15 @@ func NewProductRepository(db *pgxpool.Pool) *ProductRepository {
 // =====================
 // GET ALL
 // =====================
+// =====================
+// GET ALL
+// =====================
 func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, error) {
-	query := `SELECT id, name, price, stock FROM products`
+	query := `
+		SELECT p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0), COALESCE(c.name, '') as category_name
+		FROM products p
+		LEFT JOIN categories c ON p.category_id = c.id
+	`
 
 	rows, err := repo.db.Query(ctx, query)
 	if err != nil {
@@ -33,7 +40,7 @@ func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, er
 	products := make([]models.Product, 0)
 	for rows.Next() {
 		var p models.Product
-		if err := rows.Scan(&p.ID, &p.Name, &p.Price, &p.Stock); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &p.CategoryName); err != nil {
 			return nil, err
 		}
 		products = append(products, p)
@@ -45,31 +52,38 @@ func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, er
 // =====================
 // CREATE
 // =====================
+// =====================
+// CREATE
+// =====================
 func (repo *ProductRepository) Create(ctx context.Context, product *models.Product) error {
 	query := `
-		INSERT INTO products (name, price, stock)
-		VALUES ($1, $2, $3)
+		INSERT INTO products (name, price, stock, category_id)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`
 
 	return repo.db.
-		QueryRow(ctx, query, product.Name, product.Price, product.Stock).
+		QueryRow(ctx, query, product.Name, product.Price, product.Stock, product.CategoryID).
 		Scan(&product.ID)
 }
 
 // =====================
 // GET BY ID
 // =====================
+// =====================
+// GET BY ID
+// =====================
 func (repo *ProductRepository) GetByID(ctx context.Context, id int) (*models.Product, error) {
 	query := `
-		SELECT id, name, price, stock
-		FROM products
-		WHERE id = $1
+		SELECT p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0), COALESCE(c.name, '') as category_name
+		FROM products p
+		LEFT JOIN categories c ON p.category_id = c.id
+		WHERE p.id = $1
 	`
 
 	var p models.Product
 	err := repo.db.QueryRow(ctx, query, id).
-		Scan(&p.ID, &p.Name, &p.Price, &p.Stock)
+		Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &p.CategoryName)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -84,11 +98,14 @@ func (repo *ProductRepository) GetByID(ctx context.Context, id int) (*models.Pro
 // =====================
 // UPDATE
 // =====================
+// =====================
+// UPDATE
+// =====================
 func (repo *ProductRepository) Update(ctx context.Context, product *models.Product) error {
 	query := `
 		UPDATE products
-		SET name = $1, price = $2, stock = $3
-		WHERE id = $4
+		SET name = $1, price = $2, stock = $3, category_id = $4
+		WHERE id = $5
 	`
 
 	tag, err := repo.db.Exec(
@@ -97,6 +114,7 @@ func (repo *ProductRepository) Update(ctx context.Context, product *models.Produ
 		product.Name,
 		product.Price,
 		product.Stock,
+		product.CategoryID,
 		product.ID,
 	)
 	if err != nil {

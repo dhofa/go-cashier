@@ -39,3 +39,31 @@ func InitDB(conn string) (*pgxpool.Pool, error) {
 	return db, nil
 }
 
+func Migrate(db *pgxpool.Pool) error {
+	ctx := context.Background()
+
+	// Create categories table
+	_, err := db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS categories (
+			id SERIAL PRIMARY KEY,
+			name VARCHAR(100) NOT NULL,
+			description TEXT
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Add category_id to products if not exists
+	_, err = db.Exec(ctx, `
+		ALTER TABLE products 
+		ADD COLUMN IF NOT EXISTS category_id INT;
+	`)
+	if err != nil {
+		return err
+	}
+
+	log.Println("✅ Database migration executed")
+	return nil
+}
+

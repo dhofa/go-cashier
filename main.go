@@ -71,19 +71,37 @@ func main() {
 	defer db.Close()
 
 	// =====================
+	// Migration (Auto-Schema)
+	// =====================
+	if err := database.Migrate(db); err != nil {
+		log.Fatal("❌ Migration failed:", err)
+	}
+
+	// =====================
 	// Dependency Injection
 	// =====================
+	// Product
 	productRepo := repositories.NewProductRepository(db)
 	productService := services.NewProductService(productRepo)
 	productHandler := handlers.NewProductHandler(productService)
+
+	// Category
+	categoryRepo := repositories.NewCategoryRepository(db)
+	categoryService := services.NewCategoryService(categoryRepo)
+	categoryHandler := handlers.NewCategoryHandler(categoryService)
 
 	// =====================
 	// Router
 	// =====================
 	mux := http.NewServeMux()
 
+	// Products
 	mux.HandleFunc("/api/products", productHandler.HandleProducts)
 	mux.HandleFunc("/api/products/", productHandler.HandleProductByID)
+
+	// Categories
+	mux.HandleFunc("/api/categories", categoryHandler.HandleCategories)
+	mux.HandleFunc("/api/categories/", categoryHandler.HandleCategoryByID)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
