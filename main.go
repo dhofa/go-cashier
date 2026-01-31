@@ -42,23 +42,26 @@ func main() {
 		}
 	}
 
-	config := Config{
-		Port:   viper.GetString("PORT"),
-		DBConn: viper.GetString("DB_CONN"),
+
+// =====================
+	// ENV (RAILWAY SAFE)
+	// =====================
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	if config.Port == "" {
-		config.Port = "8080"
+	dbConn := os.Getenv("DB_CONN")
+	if dbConn == "" {
+		log.Fatal("DB_CONN is required (Railway ENV not injected)")
 	}
 
-	if config.DBConn == "" {
-		log.Fatal("DB_CONN is required (check Railway environment variables)")
-	}
+	log.Println("ENV OK | PORT:", port)
 
 	// =====================
 	// Init Database
 	// =====================
-	db, err := database.InitDB(config.DBConn)
+	db, err := database.InitDB(dbConn)
 	if err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
