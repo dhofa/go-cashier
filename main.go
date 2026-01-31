@@ -35,9 +35,11 @@ func main() {
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
+	
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Println("Error reading config file:", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.Println("Error reading config file:", err)
+		}
 	}
 
 	config := Config{
@@ -50,7 +52,7 @@ func main() {
 	}
 
 	if config.DBConn == "" {
-		log.Fatal("DB_CONN is required")
+		log.Fatal("DB_CONN is required (check Railway environment variables)")
 	}
 
 	// =====================
