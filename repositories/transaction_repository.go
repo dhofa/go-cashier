@@ -108,9 +108,9 @@ func (r *TransactionRepository) CreateTransactionFromCartItems(ctx context.Conte
 
 		// Insert Transaction Item
 		_, err = tx.Exec(ctx, `
-			INSERT INTO transaction_items (transaction_id, product_id, quantity, price)
-			VALUES ($1, $2, $3, $4)
-		`, transactionID, item.ProductID, item.Quantity, item.Price)
+			INSERT INTO transaction_items (transaction_id, product_id, product_name, quantity, price, subtotal)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, transactionID, item.ProductID, item.Name, item.Quantity, item.Price, item.Quantity*item.Price)
 		if err != nil {
 			return nil, err
 		}
@@ -213,9 +213,9 @@ func (r *TransactionRepository) CreateTransactionFromCart(ctx context.Context, c
 
 		// Insert Transaction Item
 		_, err = tx.Exec(ctx, `
-			INSERT INTO transaction_items (transaction_id, product_id, quantity, price)
-			VALUES ($1, $2, $3, $4)
-		`, transactionID, item.ProductID, item.Quantity, item.Price)
+			INSERT INTO transaction_items (transaction_id, product_id, product_name, quantity, price, subtotal)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, transactionID, item.ProductID, item.Name, item.Quantity, item.Price, item.Quantity*item.Price)
 		if err != nil {
 			return nil, err
 		}
@@ -308,18 +308,19 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id int) (*models.Tr
 		return nil, fmt.Errorf("transaction with ID %d not found", id)
 	}
 
-	// 2. Get transaction items with product details
+	// 2. Get transaction items with snapshot details
 	itemsQuery := `
 		SELECT 
 			ti.id, 
 			ti.transaction_id, 
-			ti.product_id, 
+			COALESCE(ti.product_id, 0), 
+			COALESCE(ti.product_name, ''),
 			ti.quantity, 
 			ti.price,
-			p.name,
-			p.stock
+			ti.subtotal,
+			COALESCE(p.stock, 0) as current_stock
 		FROM transaction_items ti
-		JOIN products p ON ti.product_id = p.id
+		LEFT JOIN products p ON ti.product_id = p.id
 		WHERE ti.transaction_id = $1
 		ORDER BY ti.id
 	`
@@ -333,31 +334,28 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id int) (*models.Tr
 	var items []models.TransactionItem
 	for rows.Next() {
 		var item models.TransactionItem
-		var productName string
-		var productStock int
+		var currentStock int
 
 		err := rows.Scan(
 			&item.ID,
 			&item.TransactionID,
 			&item.ProductID,
+			&item.ProductName,
 			&item.Quantity,
 			&item.Price,
-			&productName,
-			&productStock,
+			&item.SubTotal,
+			&currentStock,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		// Calculate subtotal
-		item.SubTotal = item.Price * item.Quantity
-
-		// Attach product info
+		// Attach product info (using snapshot name)
 		item.Product = &models.Product{
 			ID:    item.ProductID,
-			Name:  productName,
+			Name:  item.ProductName,
 			Price: item.Price,
-			Stock: productStock,
+			Stock: currentStock,
 		}
 
 		items = append(items, item)

@@ -14,6 +14,7 @@ type TransactionItem struct {
 	ID            int      `json:"id"`
 	TransactionID int      `json:"transaction_id"`
 	ProductID     int      `json:"product_id"`
+	ProductName   string   `json:"product_name"` // Snapshot of product name
 	Product       *Product `json:"product,omitempty"`
 	Quantity      int      `json:"quantity"`
 	Price         int      `json:"price"` // Price at time of transaction

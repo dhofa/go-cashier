@@ -115,10 +115,33 @@ func Migrate(db *pgxpool.Pool) error {
 		CREATE TABLE IF NOT EXISTS transaction_items (
 			id SERIAL PRIMARY KEY,
 			transaction_id INT REFERENCES transactions(id) ON DELETE CASCADE,
-			product_id INT REFERENCES products(id),
+			product_id INT REFERENCES products(id) ON DELETE SET NULL,
+			product_name VARCHAR(255),
 			quantity INT NOT NULL,
-			price INT NOT NULL
+			price INT NOT NULL,
+			subtotal INT NOT NULL
 		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Add new columns to transaction_items if not exists
+	_, err = db.Exec(ctx, `
+		ALTER TABLE transaction_items 
+		ADD COLUMN IF NOT EXISTS product_name VARCHAR(255),
+		ADD COLUMN IF NOT EXISTS subtotal INT;
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Update foreign key to SET NULL on delete for persistence
+	_, err = db.Exec(ctx, `
+		ALTER TABLE transaction_items 
+		DROP CONSTRAINT IF EXISTS transaction_items_product_id_fkey,
+		ADD CONSTRAINT transaction_items_product_id_fkey 
+		FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 	`)
 	if err != nil {
 		return err
