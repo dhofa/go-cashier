@@ -17,6 +17,114 @@ func NewTransactionRepository(db *pgxpool.Pool) *TransactionRepository {
 	return &TransactionRepository{db: db}
 }
 
+func (r *TransactionRepository) CreateTransactionFromCartItems(ctx context.Context, cartID int, cartItemIDs []int) (*models.Transaction, error) {
+	// 1. Begin Transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	if len(cartItemIDs) == 0 {
+		return nil, errors.New("no items to checkout")
+	}
+
+	// 2. Fetch cart items and validate they belong to the specified cart
+	type checkoutItem struct {
+		CartItemID int
+		ProductID  int
+		Quantity   int
+		Price      int
+		Stock      int
+		Name       string
+	}
+	var items []checkoutItem
+
+	for _, cartItemID := range cartItemIDs {
+		var item checkoutItem
+		item.CartItemID = cartItemID
+
+		// Fetch cart item with product details and validate cart ownership
+		err := tx.QueryRow(ctx, `
+			SELECT 
+				ci.product_id, 
+				ci.quantity,
+				p.price, 
+				p.stock, 
+				p.name
+			FROM cart_items ci
+			JOIN products p ON ci.product_id = p.id
+			WHERE ci.id = $1 AND ci.cart_id = $2
+			FOR UPDATE OF p
+		`, cartItemID, cartID).Scan(
+			&item.ProductID,
+			&item.Quantity,
+			&item.Price,
+			&item.Stock,
+			&item.Name,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("cart item with ID %d not found in cart %d", cartItemID, cartID)
+		}
+
+		items = append(items, item)
+	}
+
+	// 3. Validate Stock & Calculate Total
+	totalAmount := 0
+	for _, item := range items {
+		if item.Stock < item.Quantity {
+			return nil, fmt.Errorf("insufficient stock for product: %s (Stock: %d, Requested: %d)", item.Name, item.Stock, item.Quantity)
+		}
+		totalAmount += item.Price * item.Quantity
+	}
+
+	// 4. Create Transaction Record
+	var transactionID int
+	err = tx.QueryRow(ctx, "INSERT INTO transactions (total_amount) VALUES ($1) RETURNING id", totalAmount).Scan(&transactionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Process Items: Deduct Stock & Insert Transaction Item
+	for _, item := range items {
+		// Update Stock
+		_, err := tx.Exec(ctx, "UPDATE products SET stock = stock - $1 WHERE id = $2", item.Quantity, item.ProductID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Insert Transaction Item
+		_, err = tx.Exec(ctx, `
+			INSERT INTO transaction_items (transaction_id, product_id, quantity, price)
+			VALUES ($1, $2, $3, $4)
+		`, transactionID, item.ProductID, item.Quantity, item.Price)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 6. Remove checked out items from cart
+	for _, cartItemID := range cartItemIDs {
+		_, err := tx.Exec(ctx, "DELETE FROM cart_items WHERE id = $1", cartItemID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 7. Commit
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &models.Transaction{
+		ID:          transactionID,
+		TotalAmount: totalAmount,
+	}, nil
+}
+
+// Legacy method - kept for backward compatibility if needed
 func (r *TransactionRepository) CreateTransactionFromCart(ctx context.Context, cartID int) (*models.Transaction, error) {
 	// 1. Begin Transaction
 	tx, err := r.db.Begin(ctx)

@@ -20,6 +20,6 @@ type TransactionItem struct {
 }
 
 type CheckoutRequest struct {
-	CartID int `json:"cart_id" binding:"required"`
-	// PaymentMethod string ? maybe later
+	CartID      int   `json:"cart_id" binding:"required"`
+	CartItemIDs []int `json:"cart_items" binding:"required,min=1"`
 }

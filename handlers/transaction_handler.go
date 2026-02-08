@@ -3,9 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
+	"go-cashier/models"
 	"go-cashier/services"
 )
 
@@ -17,19 +17,18 @@ func NewTransactionHandler(service *services.TransactionService) *TransactionHan
 	return &TransactionHandler{service: service}
 }
 
-// POST /api/carts/{id}/checkout
+// POST /api/checkout
 func (h *TransactionHandler) Checkout(w http.ResponseWriter, r *http.Request) {
-	cartIDStr := r.PathValue("id")
-	cartID, err := strconv.Atoi(cartIDStr)
-	if err != nil {
-		http.Error(w, "Invalid cart ID", http.StatusBadRequest)
+	var req models.CheckoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	transaction, err := h.service.Checkout(r.Context(), cartID)
+	transaction, err := h.service.Checkout(r.Context(), req)
 	if err != nil {
 		// Handle specific errors like "insufficient stock" with 400
-		if strings.Contains(err.Error(), "insufficient stock") || strings.Contains(err.Error(), "cart is empty") {
+		if strings.Contains(err.Error(), "insufficient stock") || strings.Contains(err.Error(), "no items") {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

@@ -14,7 +14,7 @@ func NewTransactionService(repo *repositories.TransactionRepository) *Transactio
 	return &TransactionService{repo: repo}
 }
 
-func (s *TransactionService) Checkout(ctx context.Context, cartID int) (*models.Transaction, error) {
+func (s *TransactionService) Checkout(ctx context.Context, req models.CheckoutRequest) (*models.Transaction, error) {
 	// Call repository to process checkout transactionally
-	return s.repo.CreateTransactionFromCart(ctx, cartID)
+	return s.repo.CreateTransactionFromCartItems(ctx, req.CartID, req.CartItemIDs)
 }

@@ -128,8 +128,8 @@ func main() {
 	// Update item quantity
 	mux.HandleFunc("PUT /api/cart/items", cartHandler.UpdateItem)
 
-	// Checkout
-	mux.HandleFunc("POST /api/carts/{id}/checkout", transactionHandler.Checkout)
+	// Checkout - accepts array of items in request body
+	mux.HandleFunc("POST /api/checkout", transactionHandler.Checkout)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
