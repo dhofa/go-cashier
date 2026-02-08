@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 
 	"go-cashier/models"
 
@@ -21,24 +23,51 @@ func NewProductRepository(db *pgxpool.Pool) *ProductRepository {
 // =====================
 // GET ALL
 // =====================
-// =====================
-// GET ALL
-// =====================
-// =====================
-// GET ALL
-// =====================
-func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, error) {
+func (repo *ProductRepository) GetAll(ctx context.Context, params models.PaginationParams) ([]models.Product, int, error) {
+	// Query dasar
+	baseQuery := `
+		FROM products p
+		LEFT JOIN categories c ON p.category_id = c.id
+	`
+	
+	// Filter Search
+	var conditions []string
+	var args []interface{}
+	argIdx := 1
+
+	if params.Search != "" {
+		conditions = append(conditions, "(p.name ILIKE $"+strconv.Itoa(argIdx)+" OR CAST(p.price AS TEXT) ILIKE $"+strconv.Itoa(argIdx)+" OR CAST(p.stock AS TEXT) ILIKE $"+strconv.Itoa(argIdx)+")")
+		args = append(args, "%"+params.Search+"%")
+		argIdx++
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Hitung Total Data (untuk pagination)
+	countQuery := "SELECT COUNT(*) " + baseQuery + whereClause
+	var totalItems int
+	err := repo.db.QueryRow(ctx, countQuery, args...).Scan(&totalItems)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Query Data dengan Pagination
 	query := `
 		SELECT 
 			p.id, p.name, p.price, p.stock, COALESCE(p.category_id, 0),
 			c.id, c.name, c.description
-		FROM products p
-		LEFT JOIN categories c ON p.category_id = c.id
-	`
+	` + baseQuery + whereClause + `
+		ORDER BY p.id DESC
+		LIMIT $` + strconv.Itoa(argIdx) + ` OFFSET $` + strconv.Itoa(argIdx+1)
+	
+	args = append(args, params.Limit, (params.Page-1)*params.Limit)
 
-	rows, err := repo.db.Query(ctx, query)
+	rows, err := repo.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -49,7 +78,7 @@ func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, er
 		var catName, catDesc *string
 
 		if err := rows.Scan(&p.ID, &p.Name, &p.Price, &p.Stock, &p.CategoryID, &catID, &catName, &catDesc); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		if catID != nil {
@@ -66,7 +95,7 @@ func (repo *ProductRepository) GetAll(ctx context.Context) ([]models.Product, er
 		products = append(products, p)
 	}
 
-	return products, nil
+	return products, totalItems, nil
 }
 
 // =====================

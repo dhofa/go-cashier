@@ -34,14 +34,41 @@ func (h *ProductHandler) HandleProducts(w http.ResponseWriter, r *http.Request) 
 // GET ALL
 // =====================
 func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
-	products, err := h.service.GetAll(r.Context())
+	query := r.URL.Query()
+	search := query.Get("search")
+	pageStr := query.Get("page")
+	limitStr := query.Get("limit")
+
+	page := 1
+	if pageStr != "" {
+		p, err := strconv.Atoi(pageStr)
+		if err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	limit := 10
+	if limitStr != "" {
+		l, err := strconv.Atoi(limitStr)
+		if err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	params := models.PaginationParams{
+		Search: search,
+		Page:   page,
+		Limit:  limit,
+	}
+
+	result, err := h.service.GetAll(r.Context(), params)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(products)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // =====================

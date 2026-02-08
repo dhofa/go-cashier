@@ -15,8 +15,26 @@ func NewProductService(repo *repositories.ProductRepository) *ProductService {
 	return &ProductService{repo: repo}
 }
 
-func (s *ProductService) GetAll(ctx context.Context) ([]models.Product, error) {
-	return s.repo.GetAll(ctx)
+func (s *ProductService) GetAll(ctx context.Context, params models.PaginationParams) (*models.PaginatedResponse, error) {
+	products, totalItems, err := s.repo.GetAll(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := 0
+	if params.Limit > 0 {
+		totalPages = (totalItems + params.Limit - 1) / params.Limit
+	}
+
+	return &models.PaginatedResponse{
+		Data: products,
+		Meta: models.PaginationMeta{
+			TotalItems:  totalItems,
+			TotalPages:  totalPages,
+			CurrentPage: params.Page,
+			Limit:       params.Limit,
+		},
+	}, nil
 }
 
 func (s *ProductService) Create(ctx context.Context, data *models.Product) error {
