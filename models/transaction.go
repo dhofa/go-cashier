@@ -3,10 +3,11 @@ package models
 import "time"
 
 type Transaction struct {
-	ID          int               `json:"id"`
-	TotalAmount int               `json:"total_amount"`
-	CreatedAt   time.Time         `json:"created_at"`
-	Items       []TransactionItem `json:"items"`
+	ID            int               `json:"id"`
+	InvoiceNumber string            `json:"invoice_number"`
+	TotalAmount   int               `json:"total_amount"`
+	CreatedAt     time.Time         `json:"created_at"`
+	Items         []TransactionItem `json:"items"`
 }
 
 type TransactionItem struct {

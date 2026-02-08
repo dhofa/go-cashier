@@ -4,10 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
+	"strconv"
+	"time"
 	"go-cashier/models"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func generateInvoiceNumber() string {
+	now := time.Now()
+	// Generate 4 digit random number for unique part
+	unique := rand.New(rand.NewSource(time.Now().UnixNano())).Intn(9000) + 1000
+	return fmt.Sprintf("%d-%02d-%02d-%d", now.Year(), now.Month(), now.Day(), unique)
+}
 
 type TransactionRepository struct {
 	db *pgxpool.Pool
@@ -82,7 +92,8 @@ func (r *TransactionRepository) CreateTransactionFromCartItems(ctx context.Conte
 
 	// 4. Create Transaction Record
 	var transactionID int
-	err = tx.QueryRow(ctx, "INSERT INTO transactions (total_amount) VALUES ($1) RETURNING id", totalAmount).Scan(&transactionID)
+	invoiceNumber := generateInvoiceNumber()
+	err = tx.QueryRow(ctx, "INSERT INTO transactions (invoice_number, total_amount) VALUES ($1, $2) RETURNING id", invoiceNumber, totalAmount).Scan(&transactionID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +130,9 @@ func (r *TransactionRepository) CreateTransactionFromCartItems(ctx context.Conte
 	}
 
 	return &models.Transaction{
-		ID:          transactionID,
-		TotalAmount: totalAmount,
+		ID:            transactionID,
+		InvoiceNumber: invoiceNumber,
+		TotalAmount:   totalAmount,
 	}, nil
 }
 
@@ -185,7 +197,8 @@ func (r *TransactionRepository) CreateTransactionFromCart(ctx context.Context, c
 
 	// 4. Create Transaction Record
 	var transactionID int
-	err = tx.QueryRow(ctx, "INSERT INTO transactions (total_amount) VALUES ($1) RETURNING id", totalAmount).Scan(&transactionID)
+	invoiceNumber := generateInvoiceNumber()
+	err = tx.QueryRow(ctx, "INSERT INTO transactions (invoice_number, total_amount) VALUES ($1, $2) RETURNING id", invoiceNumber, totalAmount).Scan(&transactionID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +236,133 @@ func (r *TransactionRepository) CreateTransactionFromCart(ctx context.Context, c
 	}
 
 	return &models.Transaction{
-		ID:          transactionID,
-		TotalAmount: totalAmount,
+		ID:            transactionID,
+		InvoiceNumber: invoiceNumber,
+		TotalAmount:   totalAmount,
 	}, nil
+}
+
+// GetAll retrieves all transactions with pagination and search
+func (r *TransactionRepository) GetAll(ctx context.Context, params models.PaginationParams) ([]models.Transaction, int, error) {
+	offset := (params.Page - 1) * params.Limit
+
+	// Build query with search
+	baseQuery := `FROM transactions WHERE 1=1`
+	countQuery := `SELECT COUNT(*) ` + baseQuery
+	dataQuery := `SELECT id, COALESCE(invoice_number, '') as invoice_number, total_amount, created_at ` + baseQuery
+
+	args := []interface{}{}
+	argIndex := 1
+
+	// Add search filter if provided
+	if params.Search != "" {
+		// Search by transaction ID or Invoice Number
+		searchFilter := ` AND (CAST(id AS TEXT) LIKE $` + strconv.Itoa(argIndex) + ` OR invoice_number LIKE $` + strconv.Itoa(argIndex) + `)`
+		countQuery += searchFilter
+		dataQuery += searchFilter
+		args = append(args, "%"+params.Search+"%")
+		argIndex++
+	}
+
+	// Get total count
+	var total int
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Add ordering and pagination
+	dataQuery += ` ORDER BY created_at DESC LIMIT $` + strconv.Itoa(argIndex) + ` OFFSET $` + strconv.Itoa(argIndex+1)
+	args = append(args, params.Limit, offset)
+
+	// Get data
+	rows, err := r.db.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var transactions []models.Transaction
+	for rows.Next() {
+		var t models.Transaction
+		if err := rows.Scan(&t.ID, &t.InvoiceNumber, &t.TotalAmount, &t.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		transactions = append(transactions, t)
+	}
+
+	return transactions, total, nil
+}
+
+// GetByID retrieves a transaction by ID with all its items
+func (r *TransactionRepository) GetByID(ctx context.Context, id int) (*models.Transaction, error) {
+	// 1. Get transaction details
+	var transaction models.Transaction
+	err := r.db.QueryRow(ctx, `
+		SELECT id, COALESCE(invoice_number, '') as invoice_number, total_amount, created_at
+		FROM transactions
+		WHERE id = $1
+	`, id).Scan(&transaction.ID, &transaction.InvoiceNumber, &transaction.TotalAmount, &transaction.CreatedAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("transaction with ID %d not found", id)
+	}
+
+	// 2. Get transaction items with product details
+	itemsQuery := `
+		SELECT 
+			ti.id, 
+			ti.transaction_id, 
+			ti.product_id, 
+			ti.quantity, 
+			ti.price,
+			p.name,
+			p.stock
+		FROM transaction_items ti
+		JOIN products p ON ti.product_id = p.id
+		WHERE ti.transaction_id = $1
+		ORDER BY ti.id
+	`
+
+	rows, err := r.db.Query(ctx, itemsQuery, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.TransactionItem
+	for rows.Next() {
+		var item models.TransactionItem
+		var productName string
+		var productStock int
+
+		err := rows.Scan(
+			&item.ID,
+			&item.TransactionID,
+			&item.ProductID,
+			&item.Quantity,
+			&item.Price,
+			&productName,
+			&productStock,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Calculate subtotal
+		item.SubTotal = item.Price * item.Quantity
+
+		// Attach product info
+		item.Product = &models.Product{
+			ID:    item.ProductID,
+			Name:  productName,
+			Price: item.Price,
+			Stock: productStock,
+		}
+
+		items = append(items, item)
+	}
+
+	transaction.Items = items
+	return &transaction, nil
 }

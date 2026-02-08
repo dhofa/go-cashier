@@ -131,6 +131,10 @@ func main() {
 	// Checkout - accepts array of items in request body
 	mux.HandleFunc("POST /api/checkout", transactionHandler.Checkout)
 
+	// Transactions
+	mux.HandleFunc("/api/transactions", transactionHandler.HandleTransactions)
+	mux.HandleFunc("/api/transactions/", transactionHandler.HandleTransactionByID)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(models.Response{

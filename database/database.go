@@ -92,9 +92,19 @@ func Migrate(db *pgxpool.Pool) error {
 	_, err = db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS transactions (
 			id SERIAL PRIMARY KEY,
+			invoice_number VARCHAR(50) UNIQUE,
 			total_amount INT NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Add invoice_number column if not exists (for existing tables)
+	_, err = db.Exec(ctx, `
+		ALTER TABLE transactions 
+		ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50) UNIQUE;
 	`)
 	if err != nil {
 		return err
