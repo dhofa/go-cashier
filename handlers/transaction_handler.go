@@ -130,3 +130,51 @@ func (h *TransactionHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(transaction)
 }
+
+// =====================
+// SALES SUMMARY
+// =====================
+// GET /api/sales/summary?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+func (h *TransactionHandler) GetSalesSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+	startDate := query.Get("start_date")
+	endDate := query.Get("end_date")
+
+	summary, err := h.service.GetSalesSummary(r.Context(), startDate, endDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+// =====================
+// SALES REPORT
+// =====================
+// GET /api/report?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+func (h *TransactionHandler) GetSalesReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query()
+	startDate := query.Get("start_date")
+	endDate := query.Get("end_date")
+
+	report, err := h.service.GetSalesReport(r.Context(), startDate, endDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
+}

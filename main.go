@@ -135,6 +135,10 @@ func main() {
 	mux.HandleFunc("/api/transactions", transactionHandler.HandleTransactions)
 	mux.HandleFunc("/api/transactions/", transactionHandler.HandleTransactionByID)
 
+	// Sales Summary & Report
+	mux.HandleFunc("/api/sales/summary", transactionHandler.GetSalesSummary)
+	mux.HandleFunc("/api/report", transactionHandler.GetSalesReport)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(models.Response{

@@ -44,3 +44,11 @@ func (s *TransactionService) GetAll(ctx context.Context, params models.Paginatio
 func (s *TransactionService) GetByID(ctx context.Context, id int) (*models.Transaction, error) {
 	return s.repo.GetByID(ctx, id)
 }
+
+func (s *TransactionService) GetSalesSummary(ctx context.Context, startDate, endDate string) (*models.SalesSummary, error) {
+	return s.repo.GetSalesSummary(ctx, startDate, endDate)
+}
+
+func (s *TransactionService) GetSalesReport(ctx context.Context, startDate, endDate string) (*models.SalesReport, error) {
+	return s.repo.GetSalesReport(ctx, startDate, endDate)
+}

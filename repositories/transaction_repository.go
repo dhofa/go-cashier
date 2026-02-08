@@ -364,3 +364,101 @@ func (r *TransactionRepository) GetByID(ctx context.Context, id int) (*models.Tr
 	transaction.Items = items
 	return &transaction, nil
 }
+
+// GetSalesSummary aggregates sales data within a date range
+func (r *TransactionRepository) GetSalesSummary(ctx context.Context, startDate, endDate string) (*models.SalesSummary, error) {
+	query := `
+		SELECT 
+			COALESCE(SUM(total_amount), 0) as total_sales,
+			COUNT(*) as total_transactions
+		FROM transactions
+		WHERE 1=1
+	`
+	args := []interface{}{}
+	argIdx := 1
+
+	if startDate != "" {
+		query += fmt.Sprintf(" AND created_at >= $%d", argIdx)
+		args = append(args, startDate+" 00:00:00")
+		argIdx++
+	}
+
+	if endDate != "" {
+		query += fmt.Sprintf(" AND created_at <= $%d", argIdx)
+		args = append(args, endDate+" 23:59:59")
+		argIdx++
+	}
+
+	var summary models.SalesSummary
+	err := r.db.QueryRow(ctx, query, args...).Scan(&summary.TotalSales, &summary.TotalTransactions)
+	if err != nil {
+		return nil, err
+	}
+
+	return &summary, nil
+}
+
+// GetBestSellingProducts returns top selling products within a date range
+func (r *TransactionRepository) GetBestSellingProducts(ctx context.Context, startDate, endDate string, limit int) ([]models.BestSellingProduct, error) {
+	query := `
+		SELECT 
+			COALESCE(ti.product_id, 0),
+			COALESCE(ti.product_name, 'Unknown'),
+			SUM(ti.quantity) as total_sold
+		FROM transaction_items ti
+		JOIN transactions t ON ti.transaction_id = t.id
+		WHERE 1=1
+	`
+	args := []interface{}{}
+	argIdx := 1
+
+	if startDate != "" {
+		query += fmt.Sprintf(" AND t.created_at >= $%d", argIdx)
+		args = append(args, startDate+" 00:00:00")
+		argIdx++
+	}
+
+	if endDate != "" {
+		query += fmt.Sprintf(" AND t.created_at <= $%d", argIdx)
+		args = append(args, endDate+" 23:59:59")
+		argIdx++
+	}
+
+	query += " GROUP BY ti.product_id, ti.product_name ORDER BY total_sold DESC LIMIT $" + strconv.Itoa(argIdx)
+	args = append(args, limit)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var products []models.BestSellingProduct
+	for rows.Next() {
+		var p models.BestSellingProduct
+		if err := rows.Scan(&p.ProductID, &p.ProductName, &p.TotalSold); err != nil {
+			return nil, err
+		}
+		products = append(products, p)
+	}
+
+	return products, nil
+}
+
+// GetSalesReport returns a consolidated report
+func (r *TransactionRepository) GetSalesReport(ctx context.Context, startDate, endDate string) (*models.SalesReport, error) {
+	summary, err := r.GetSalesSummary(ctx, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	bestProducts, err := r.GetBestSellingProducts(ctx, startDate, endDate, 5)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.SalesReport{
+		Summary:             *summary,
+		BestSellingProducts: bestProducts,
+	}, nil
+}
