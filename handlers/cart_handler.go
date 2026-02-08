@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+
 	"go-cashier/models"
 	"go-cashier/services"
 )
@@ -58,6 +60,10 @@ func (h *CartHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 
 	cart, err := h.service.AddItem(r.Context(), req)
 	if err != nil {
+		if strings.Contains(err.Error(), "insufficient stock") || strings.Contains(err.Error(), "product not found") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -79,6 +85,10 @@ func (h *CartHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 
 	cart, err := h.service.UpdateItem(r.Context(), req.CartID, req.ProductID, req)
 	if err != nil {
+		if strings.Contains(err.Error(), "insufficient stock") || strings.Contains(err.Error(), "product not found") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
