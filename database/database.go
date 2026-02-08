@@ -63,6 +63,57 @@ func Migrate(db *pgxpool.Pool) error {
 		return err
 	}
 
+	// Create carts table
+	_, err = db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS carts (
+			id SERIAL PRIMARY KEY,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Create cart_items table
+	_, err = db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS cart_items (
+			id SERIAL PRIMARY KEY,
+			cart_id INT REFERENCES carts(id) ON DELETE CASCADE,
+			product_id INT REFERENCES products(id),
+			quantity INT NOT NULL CHECK (quantity > 0),
+			UNIQUE(cart_id, product_id)
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Create transactions table
+	_, err = db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS transactions (
+			id SERIAL PRIMARY KEY,
+			total_amount INT NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Create transaction_items table
+	_, err = db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS transaction_items (
+			id SERIAL PRIMARY KEY,
+			transaction_id INT REFERENCES transactions(id) ON DELETE CASCADE,
+			product_id INT REFERENCES products(id),
+			quantity INT NOT NULL,
+			price INT NOT NULL
+		);
+	`)
+	if err != nil {
+		return err
+	}
+
 	log.Println("✅ Database migration executed")
 	return nil
 }

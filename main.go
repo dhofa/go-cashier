@@ -90,6 +90,16 @@ func main() {
 	categoryService := services.NewCategoryService(categoryRepo)
 	categoryHandler := handlers.NewCategoryHandler(categoryService)
 
+	// Cart
+	cartRepo := repositories.NewCartRepository(db)
+	cartService := services.NewCartService(cartRepo)
+	cartHandler := handlers.NewCartHandler(cartService)
+
+	// Transaction
+	transactionRepo := repositories.NewTransactionRepository(db)
+	transactionService := services.NewTransactionService(transactionRepo)
+	transactionHandler := handlers.NewTransactionHandler(transactionService)
+
 	// =====================
 	// Router
 	// =====================
@@ -102,6 +112,24 @@ func main() {
 	// Categories
 	mux.HandleFunc("/api/categories", categoryHandler.HandleCategories)
 	mux.HandleFunc("/api/categories/", categoryHandler.HandleCategoryByID)
+
+	// Carts
+	// POST /api/cart/items handles both:
+	// 1. Adding item to existing cart (if cart_id provided)
+	// 2. Creating new cart + adding item (if cart_id is 0/empty)
+	mux.HandleFunc("POST /api/cart/items", cartHandler.AddToCart)
+	
+	// Helper to view cart
+	mux.HandleFunc("GET /api/carts/{id}", cartHandler.GetCart)
+	
+	// Remove item
+	mux.HandleFunc("DELETE /api/carts/{id}/items/{product_id}", cartHandler.RemoveItem)
+
+	// Update item quantity
+	mux.HandleFunc("PUT /api/cart/items", cartHandler.UpdateItem)
+
+	// Checkout
+	mux.HandleFunc("POST /api/carts/{id}/checkout", transactionHandler.Checkout)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
